@@ -122,7 +122,12 @@ function buildBlocks(tasks, settings, date) {
     if (a.type === "event" && b.type === "event") return URGS.indexOf(a.urgency || "보통") - URGS.indexOf(b.urgency || "보통");
     return PRIOS.indexOf(a.priority) - PRIOS.indexOf(b.priority);
   });
-  const blocks = [], queue = sorted.slice();
+  const blocks = [];
+  sorted.filter(t => t.fixedTime).forEach(task => {
+    const startM = toM(task.fixedTime);
+    blocks.push({ id: uid(), taskId: task.id, type: "focus", start: startM, dur: task.duration || 30, label: task.title, taskType: task.type, goalId: task.goalId, slotId: null, isFixedTime: true });
+  });
+  const queue = sorted.filter(t => !t.fixedTime);
   for (let si = 0; si < slots.length; si++) {
     const slot = slots[si];
     let cur = toM(slot.start);
@@ -264,7 +269,7 @@ function DayTimeline({ date, tasks, settings, onComplete, onCancel }) {
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 4, height: "100%" }}>
                   <div style={{ flex: 1, overflow: "hidden", minWidth: 0 }}>
                     <div style={{ fontSize: sh ? 9.5 : 11, fontWeight: 700, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.3 }}>{b.label}</div>
-                    {!sh && <div style={{ fontSize: 9, color: "#94a3b8" }}>{fmt(b.start)}–{fmt(b.start + b.dur)}{goal ? " · 🎯" + goal.title : ""}{task && task.compressed ? " · ⚡" : ""}</div>}
+                    {!sh && <div style={{ fontSize: 9, color: "#94a3b8" }}>{fmt(b.start)}–{fmt(b.start + b.dur)}{goal ? " · 🎯" + goal.title : ""}{task && task.compressed ? " · ⚡" : ""}{b.isFixedTime ? " · ⏰고정" : ""}</div>}
                   </div>
                   {isTod && b.type === "focus" && task && !task.done && !task.cancelled && !sh && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 2, flexShrink: 0 }}>
@@ -428,6 +433,7 @@ function TaskCard({ task, settings, onEdit, onComplete, onCancel }) {
           <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
             {task.category1}{task.category2 ? " > " + task.category2 : ""}{task.duration ? " · " + task.duration + "분" : ""}
             {task.type === "flex" && task.flexMin ? " (최소 " + task.flexMin + "분)" : ""}
+            {task.fixedTime ? " · ⏰ " + task.fixedTime + " 고정" : ""}
             {task.dueDate ? " · 마감 " + task.dueDate : ""}
           </div>
           {goal && <div style={{ fontSize: 11, color: "#6366f1" }}>🎯 {goal.title}</div>}
@@ -686,11 +692,16 @@ function TaskForm({ task, settings, onSave, onClose }) {
       </div>
       {needsSched && (
         <div style={{ background: "#f8fafc", border: "1.5px solid #e2e8f0", borderRadius: 10, padding: "10px 12px" }}>
-          <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginBottom: 8 }}>허용 시간대 {safeArr(f.allowedSlots).length === 0 && <span style={{ fontWeight: 400, color: "#94a3b8" }}>(모든 시간대)</span>}</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginBottom: 8 }}>허용 시간대 {!f.fixedTime && safeArr(f.allowedSlots).length === 0 && <span style={{ fontWeight: 400, color: "#94a3b8" }}>(모든 시간대)</span>}</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, opacity: f.fixedTime ? 0.35 : 1, pointerEvents: f.fixedTime ? "none" : "auto" }}>
             {allSlots.slice().sort((a, b) => toM(a.start) - toM(b.start)).map(slot => { const on = safeArr(f.allowedSlots).indexOf(slot.lb) >= 0; return <button type="button" key={slot.id} onClick={() => toggleSlot(slot.lb)} style={{ padding: "5px 11px", border: "2px solid " + (on ? "#6366f1" : "#e2e8f0"), borderRadius: 20, background: on ? "#6366f1" : "#fff", color: on ? "#fff" : "#64748b", cursor: "pointer", fontSize: 12, fontWeight: on ? 700 : 400 }}>{slot.lb} <span style={{ fontSize: 10, opacity: .75 }}>{slot.start}</span></button>; })}
           </div>
-          {safeArr(f.allowedSlots).length === 0 && <div style={{ marginTop: 6, fontSize: 11, color: "#a5b4fc" }}>💡 선택 없으면 모든 시간대에 배정될 수 있어요.</div>}
+          {!f.fixedTime && safeArr(f.allowedSlots).length === 0 && <div style={{ marginTop: 6, fontSize: 11, color: "#a5b4fc" }}>💡 선택 없으면 모든 시간대에 배정될 수 있어요.</div>}
+          <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
+            <button type="button" onClick={() => set("fixedTime", f.fixedTime ? "" : "09:00")} style={{ padding: "5px 12px", border: "2px solid " + (f.fixedTime ? "#ef4444" : "#e2e8f0"), borderRadius: 20, background: f.fixedTime ? "#fef2f2" : "#fff", color: f.fixedTime ? "#ef4444" : "#64748b", cursor: "pointer", fontSize: 12, fontWeight: f.fixedTime ? 700 : 400 }}>⏰ 고정 시간</button>
+            {f.fixedTime && <input type="time" value={f.fixedTime} onChange={e => set("fixedTime", e.target.value)} style={{ borderRadius: 8, border: "2px solid #ef4444", padding: "5px 10px", fontSize: 13, outline: "none" }} />}
+            {f.fixedTime && <span style={{ fontSize: 11, color: "#ef4444" }}>정확히 이 시간에 배치됩니다</span>}
+          </div>
         </div>
       )}
       {f.repeat === "매주" && (
